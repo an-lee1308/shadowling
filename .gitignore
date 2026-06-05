@@ -27,3 +27,11 @@ Thumbs.db
 .vscode/
 *.suo
 *.user
+
+# Claude Code
+.claude/
+
+# Auto-generated
+frontend/*.log
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo

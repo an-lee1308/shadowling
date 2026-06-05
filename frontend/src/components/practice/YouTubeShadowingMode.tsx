@@ -67,6 +67,7 @@ export default function YouTubeShadowingMode({ lesson }: Props) {
   const [recordingUrl, setRecordingUrl] = useState("");
   const [playerReady, setPlayerReady] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [scoreError, setScoreError] = useState("");
 
   const playerRef = useRef<YTPlayer | null>(null);
   const playerDivRef = useRef<HTMLDivElement>(null);
@@ -191,6 +192,7 @@ export default function YouTubeShadowingMode({ lesson }: Props) {
   }
 
   async function uploadAndScore(blob: Blob) {
+    setScoreError("");
     try {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
@@ -210,14 +212,15 @@ export default function YouTubeShadowingMode({ lesson }: Props) {
         const scored = json.data as PronunciationResult;
         setResult(scored);
 
-        // Save progress to backend
         try {
           const saved = await youtube.updateProgress(lesson.id, currentIdx, scored.overallScore);
           setProgressMap((prev) => new Map(prev).set(currentIdx, saved));
         } catch { /* progress save failure is non-critical */ }
+      } else {
+        setScoreError("Không thể phân tích phát âm. Hãy thử lại.");
       }
-    } catch (e) {
-      console.error("Score failed:", e);
+    } catch {
+      setScoreError("Lỗi kết nối. Kiểm tra mạng và thử lại.");
     } finally {
       setSegState("done");
     }
@@ -359,6 +362,7 @@ export default function YouTubeShadowingMode({ lesson }: Props) {
           </div>
 
           {micError && <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">{micError}</p>}
+          {scoreError && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 px-4 py-2 rounded-lg">{scoreError}</p>}
         </div>
 
         {/* Result */}

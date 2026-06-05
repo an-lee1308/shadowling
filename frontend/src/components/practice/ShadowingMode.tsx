@@ -36,6 +36,7 @@ export default function ShadowingMode({ lesson, onComplete }: Props) {
   const [finished, setFinished] = useState(false);
   const [startTime] = useState(Date.now());
   const [micError, setMicError] = useState("");
+  const [scoreError, setScoreError] = useState("");
   const [recordingUrl, setRecordingUrl] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -138,6 +139,7 @@ export default function ShadowingMode({ lesson, onComplete }: Props) {
   }
 
   async function uploadAndScore(blob: Blob) {
+    setScoreError("");
     try {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
@@ -161,9 +163,11 @@ export default function ShadowingMode({ lesson, onComplete }: Props) {
           next[currentIdx] = result;
           return next;
         });
+      } else {
+        setScoreError("Không thể phân tích phát âm. Hãy thử lại.");
       }
-    } catch (e) {
-      console.error("Score failed:", e);
+    } catch {
+      setScoreError("Lỗi kết nối. Kiểm tra mạng và thử lại.");
     } finally {
       setSegState("done");
     }
@@ -337,6 +341,9 @@ export default function ShadowingMode({ lesson, onComplete }: Props) {
 
         {micError && (
           <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">{micError}</p>
+        )}
+        {scoreError && (
+          <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 px-4 py-2 rounded-lg">{scoreError}</p>
         )}
       </div>
 
