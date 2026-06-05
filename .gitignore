@@ -1,0 +1,29 @@
+# Backend
+backend/target/
+backend/*.log
+backend/.mvn/
+backend/*.class
+backend/.classpath
+backend/.project
+backend/.settings/
+backend/.idea/
+*.jar
+*.war
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user

@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: 249 250 251;
+    --surface: 255 255 255;
+    --border: 229 231 235;
+    --text: 17 24 39;
+    --text-muted: 107 114 128;
+  }
+
+  .dark {
+    --bg: 17 24 39;
+    --surface: 31 41 55;
+    --border: 55 65 81;
+    --text: 249 250 251;
+    --text-muted: 156 163 175;
+  }
+
+  body {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-50 font-sans antialiased transition-colors duration-200;
+  }
+
+  * {
+    @apply border-gray-200 dark:border-gray-700;
+  }
+}
+
+@layer utilities {
+  .word-correct {
+    @apply bg-green-100 text-green-800 rounded px-0.5;
+  }
+  .word-error {
+    @apply bg-red-100 text-red-800 rounded px-0.5 line-through;
+  }
+  .word-pending {
+    @apply text-gray-400;
+  }
+}
