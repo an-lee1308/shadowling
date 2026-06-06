@@ -25,6 +25,10 @@ export default function LessonDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>("dictation");
   const [completed, setCompleted] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
+  const [guideVisible, setGuideVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !localStorage.getItem("lesson_guide_seen");
+  });
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -66,11 +70,6 @@ export default function LessonDetailPage() {
     { key: "shadowing", label: "Shadowing" },
     { key: "transcript", label: "Transcript" },
   ];
-
-  const [guideVisible, setGuideVisible] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !localStorage.getItem("lesson_guide_seen");
-  });
 
   function dismissGuide() {
     localStorage.setItem("lesson_guide_seen", "1");

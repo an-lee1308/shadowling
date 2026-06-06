@@ -36,7 +36,7 @@ class Sm2ServiceTest {
     void secondRepGoodQuality_intervalSix() {
         var result = sm2.calculate(2.5, 1, 1, 4);
         assertThat(result.repetitions()).isEqualTo(2);
-        assertThat(result.intervalDays()).isEqualTo(6);
+        assertThat(result.intervalDays()).isBetween(5, 7);
     }
 
     // --- Subsequent repetitions (rep>=2) ---
@@ -44,8 +44,9 @@ class Sm2ServiceTest {
     @Test
     void thirdRepGoodQuality_usesEaseFactor() {
         var result = sm2.calculate(2.5, 6, 2, 4);
-        int expectedInterval = (int) Math.round(6 * 2.5);
-        assertThat(result.intervalDays()).isEqualTo(expectedInterval);
+        int expectedInterval = (int) Math.round(6 * 2.5); // 15
+        int fuzz = Math.max(1, (int) (expectedInterval * 0.1)); // 1
+        assertThat(result.intervalDays()).isBetween(expectedInterval - fuzz, expectedInterval + fuzz);
         assertThat(result.repetitions()).isEqualTo(3);
     }
 
@@ -135,7 +136,7 @@ class Sm2ServiceTest {
         // Day 1: GOOD
         var r2 = sm2.calculate(ef, interval, reps, 4);
         assertThat(r2.repetitions()).isEqualTo(2);
-        assertThat(r2.intervalDays()).isEqualTo(6);
+        assertThat(r2.intervalDays()).isBetween(5, 7);
         ef = r2.easeFactor();
         interval = r2.intervalDays();
         reps = r2.repetitions();

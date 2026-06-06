@@ -12,8 +12,15 @@ import com.shadowling.repository.YouTubeLessonRepository;
 import com.shadowling.repository.YouTubeSentenceProgressRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -21,6 +28,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +49,13 @@ public class YouTubeService {
     private final UserRepository userRepository;
     private final GamificationService gamificationService;
     private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
+
+    @Value("${openai.api-key:}")
+    private String openaiApiKey;
+
+    @Value("${openai.whisper-url}")
+    private String whisperUrl;
 
     private static final int PASS_THRESHOLD = 70;
     private static final int XP_PER_SENTENCE = 10;
@@ -56,16 +72,16 @@ public class YouTubeService {
         String[] info = fetchVideoInfo(videoId);
         String title = info[0], thumbnailUrl = info[1], channelName = info[2];
 
-        List<CaptionSegment> captions;
+        List<CaptionSegment> captions = null;
         try {
             captions = fetchCaptions(videoId);
         } catch (Exception e) {
-            log.warn("Caption fetch failed for {}: {}", videoId, e.getMessage());
-            throw new RuntimeException("Không tìm thấy phụ đề tiếng Anh cho video này. Hãy thử video khác.");
+            log.warn("Caption fetch failed for {}, falling back to Whisper: {}", videoId, e.getMessage());
         }
 
-        if (captions.isEmpty()) {
-            throw new RuntimeException("Video này không có phụ đề tiếng Anh.");
+        if (captions == null || captions.isEmpty()) {
+            log.info("No captions found for {}, generating via Whisper", videoId);
+            captions = generateCaptionsViaWhisper(videoId);
         }
 
         User user = userRepository.findById(userId).orElseThrow();
@@ -329,5 +345,95 @@ public class YouTubeService {
         } catch (JsonProcessingException e) {
             return List.of();
         }
+    }
+
+    // ─── Whisper fallback ─────────────────────────────────────────────────────
+
+    private List<CaptionSegment> generateCaptionsViaWhisper(String videoId) {
+        if (!StringUtils.hasText(openaiApiKey)) {
+            throw new RuntimeException("Video không có phụ đề và chưa cấu hình OpenAI API key.");
+        }
+
+        Path tempDir;
+        try {
+            tempDir = Files.createTempDirectory("yt_");
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi tạo thư mục tạm.");
+        }
+
+        Path audioFile = tempDir.resolve(videoId + ".mp3");
+        String outputTemplate = tempDir.resolve(videoId + ".%(ext)s").toString();
+
+        try {
+            downloadAudio(videoId, outputTemplate, audioFile);
+            byte[] audioBytes = Files.readAllBytes(audioFile);
+            List<CaptionSegment> segments = callWhisper(audioBytes);
+            if (segments.isEmpty()) {
+                throw new RuntimeException("Không thể tạo phụ đề cho video này.");
+            }
+            return segments;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi khi tạo phụ đề tự động: " + e.getMessage());
+        } finally {
+            try { Files.deleteIfExists(audioFile); } catch (Exception ignored) {}
+            try { Files.deleteIfExists(tempDir); } catch (Exception ignored) {}
+        }
+    }
+
+    private void downloadAudio(String videoId, String outputTemplate, Path expectedFile) throws Exception {
+        String ytDlp = System.getProperty("os.name", "").toLowerCase().contains("win") ? "yt-dlp.exe" : "yt-dlp";
+        ProcessBuilder pb = new ProcessBuilder(
+                ytDlp,
+                "--no-playlist",
+                "-x", "--audio-format", "mp3",
+                "--audio-quality", "5",
+                "--max-filesize", "24m",
+                "-o", outputTemplate,
+                "https://www.youtube.com/watch?v=" + videoId
+        );
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+
+        if (exitCode != 0 || !Files.exists(expectedFile)) {
+            log.warn("yt-dlp failed (exit {}) for {}: {}", exitCode, videoId, output);
+            throw new RuntimeException("Không thể tải audio từ video này. Hãy thử video khác.");
+        }
+    }
+
+    private List<CaptionSegment> callWhisper(byte[] audioBytes) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.setBearerAuth(openaiApiKey);
+
+        ByteArrayResource fileResource = new ByteArrayResource(audioBytes) {
+            @Override public String getFilename() { return "audio.mp3"; }
+        };
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", fileResource);
+        body.add("model", "whisper-1");
+        body.add("language", "en");
+        body.add("response_format", "verbose_json");
+
+        ResponseEntity<JsonNode> resp = restTemplate.postForEntity(
+                whisperUrl, new HttpEntity<>(body, headers), JsonNode.class);
+
+        JsonNode root = resp.getBody();
+        if (root == null) return List.of();
+
+        List<CaptionSegment> segments = new ArrayList<>();
+        for (JsonNode seg : root.path("segments")) {
+            long startMs = (long) (seg.path("start").asDouble() * 1000);
+            long endMs = (long) (seg.path("end").asDouble() * 1000);
+            String text = seg.path("text").asText("").trim();
+            if (!text.isEmpty()) {
+                segments.add(new CaptionSegment(startMs, endMs, text));
+            }
+        }
+        return segments;
     }
 }
